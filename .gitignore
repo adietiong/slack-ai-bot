@@ -1,0 +1,17 @@
+node_modules/
+.env
+sessions.json
+dist/
+
+.superpowers/
+
+# runtime / local-only
+logs/
+scripts/bot.pid
+tmp-*.mjs
+
+# local domain knowledge (org-specific) — never publish
+prompts/*.local.md
+
+# internal planning/design docs — not part of the public template
+docs/

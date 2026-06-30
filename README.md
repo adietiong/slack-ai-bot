@@ -1,0 +1,41 @@
+# slack-claude-code-bot
+
+Two-way chat between Slack and Claude Code, **read-only** over one or more of your
+code repositories, with human-gated Trello bug tickets. Mention the bot in a
+channel and it answers questions about your codebase in the thread; reply in the
+thread to keep the same Claude session and context.
+
+## Setup
+
+1. `npm install`
+2. Copy `.env.example` → `.env` and fill in tokens + repo paths.
+3. Create a Slack app with Socket Mode enabled. Bot scopes: `app_mentions:read`,
+   `chat:write`, `channels:history`, `groups:history`, and `files:read` (to read
+   pasted screenshots). Subscribe to events `app_mention` and `message.channels`.
+   Install to the workspace.
+4. `npm test` — all suites green.
+5. `npm run dev` — starts the bot.
+
+## Usage
+
+- `@bot why does this endpoint return 500?` — starts a thread; reply in-thread to
+  continue with full context. Paste a screenshot and the bot will read it.
+- When Claude proposes a bug ticket, click **Create Trello card** to file it or
+  **Discard** to drop it.
+
+## Optional features
+
+- **Domain knowledge** — set `DOMAIN_PROMPT_FILE` to a local Markdown file
+  (e.g. `prompts/domain.local.md`, gitignored) and its contents are appended to
+  the system prompt. Put your schema names, routing docs, and product jargon
+  there so they stay out of source. See `prompts/domain.example.md`.
+- **Reporting database** — set all five `REPORTS_DB_*` vars to expose a
+  read-only `query_reports_db` tool (single `SELECT`/`WITH`/`EXEC`, capped to
+  100 rows). Use a dedicated read-only DB login.
+
+## Safety
+
+Read-only: the bot may only `Read`, `Grep`, `Glob` the configured repos. No
+edits, commits, pushes, or shell. Trello card creation is the only write side
+effect and is always behind a human button click. The reporting-database tool,
+if enabled, rejects any non-`SELECT`/`WITH`/`EXEC` statement.
