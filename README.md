@@ -39,6 +39,27 @@ Manual steps:
   read-only `query_reports_db` tool (single `SELECT`/`WITH`/`EXEC`, capped to
   100 rows). Use a dedicated read-only DB login.
 
+## Run on a schedule (Windows)
+
+To keep the bot running automatically on a **Mon–Fri 09:00–18:00** window,
+register the included scheduled tasks:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\install-tasks.ps1
+```
+
+This creates four tasks (run as the current user, only when logged on):
+
+- **ErpBot Start / Stop** — start at 09:00, stop at 18:00, weekdays only.
+- **ErpBot Pull** — fast-forwards your read-only repo clones every 2h (no-ops
+  outside the window).
+- **ErpBot Guard** — at logon and every 15 min, starts the bot if it's down
+  inside the window (self-healing crashes and missed wakes) and stops it
+  outside. The window rule (Mon–Fri 09:00–18:00) is enforced by the scripts
+  themselves, so the repeats are safe to fire around the clock.
+
+Remove them with `scripts\uninstall-tasks.ps1`.
+
 ## Safety
 
 Read-only: the bot may only `Read`, `Grep`, `Glob` the configured repos. No
