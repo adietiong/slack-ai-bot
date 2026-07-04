@@ -5,6 +5,16 @@
 # Clone paths are read from .env (BACKEND_PATH / FRONTEND_PATH) so this script
 # stays generic — point those at your dedicated read-only clones.
 $ErrorActionPreference = "Continue"
+
+# Repo updates only during business hours: Mon-Fri, 09:00-18:00 local.
+$now = Get-Date
+$isWeekday = $now.DayOfWeek -ne [DayOfWeek]::Saturday -and $now.DayOfWeek -ne [DayOfWeek]::Sunday
+$inHours = $now.Hour -ge 9 -and $now.Hour -lt 18
+if (-not ($isWeekday -and $inHours)) {
+  "[$(Get-Date -Format o)] off-hours ($($now.DayOfWeek) $($now.ToString('HH:mm'))): skipping repo pull"
+  return
+}
+
 $envFile = Join-Path $PSScriptRoot "..\.env"
 $clones = @()
 if (Test-Path $envFile) {
