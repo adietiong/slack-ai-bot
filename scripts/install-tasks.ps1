@@ -29,14 +29,21 @@ $weekdays = @('Monday','Tuesday','Wednesday','Thursday','Friday')
 $startTrigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek $weekdays -At 9am
 $stopTrigger  = New-ScheduledTaskTrigger -Weekly -DaysOfWeek $weekdays -At 6pm
 
-# Pull — every 2 hours (script gates to the window)
-$pullTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date) `
-  -RepetitionInterval (New-TimeSpan -Hours 2) -RepetitionDuration (New-TimeSpan -Days 3650)
+# A weekday trigger that repeats through the 09:00-18:00 window only, so
+# nothing fires on weekends or off-hours. (Weekly base + intraday repetition.)
+function New-WindowTrigger($interval) {
+  $t = New-ScheduledTaskTrigger -Weekly -DaysOfWeek $weekdays -At 9am
+  $rep = New-ScheduledTaskTrigger -Once -At 9am `
+    -RepetitionInterval $interval -RepetitionDuration (New-TimeSpan -Hours 9)
+  $t.Repetition = $rep.Repetition
+  return $t
+}
 
-# Guard — at logon + every 15 min (self-heals crashes, enforces the window)
-$guardLogon  = New-ScheduledTaskTrigger -AtLogOn -User $user
-$guardRepeat = New-ScheduledTaskTrigger -Once -At (Get-Date) `
-  -RepetitionInterval (New-TimeSpan -Minutes 15) -RepetitionDuration (New-TimeSpan -Days 3650)
+# Pull — every 2h, Mon-Fri 09:00-18:00 only
+$pullTrigger = New-WindowTrigger (New-TimeSpan -Hours 2)
+
+# Guard — every 15 min, Mon-Fri 09:00-18:00 only (self-heals crashes)
+$guardTrigger = New-WindowTrigger (New-TimeSpan -Minutes 15)
 
 Register-ScheduledTask -TaskName "ErpBot Start" -Action (New-BotAction "start-bot.ps1") `
   -Trigger $startTrigger -Settings $settings -RunLevel Limited -Force | Out-Null
@@ -45,6 +52,6 @@ Register-ScheduledTask -TaskName "ErpBot Stop" -Action (New-BotAction "stop-bot.
 Register-ScheduledTask -TaskName "ErpBot Pull" -Action (New-BotAction "pull-repos.ps1") `
   -Trigger $pullTrigger -Settings $settings -RunLevel Limited -Force | Out-Null
 Register-ScheduledTask -TaskName "ErpBot Guard" -Action (New-BotAction "ensure-bot-window.ps1") `
-  -Trigger $guardLogon,$guardRepeat -Settings $settings -RunLevel Limited -Force | Out-Null
+  -Trigger $guardTrigger -Settings $settings -RunLevel Limited -Force | Out-Null
 
 "Registered: ErpBot Start / Stop / Pull / Guard (Mon-Fri 09:00-18:00)."
