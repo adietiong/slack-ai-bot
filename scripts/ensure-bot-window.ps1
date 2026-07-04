@@ -5,7 +5,8 @@
 $ErrorActionPreference = "Stop"
 
 $now = Get-Date
-$inWindow = ($now.Hour -ge 9 -and $now.Hour -lt 18)
+$isWeekday = $now.DayOfWeek -ne [DayOfWeek]::Saturday -and $now.DayOfWeek -ne [DayOfWeek]::Sunday
+$inWindow = ($isWeekday -and $now.Hour -ge 9 -and $now.Hour -lt 18)
 
 $running = Get-CimInstance Win32_Process -Filter "name='node.exe'" |
   Where-Object { $_.CommandLine -match 'index\.ts' -or $_.CommandLine -match 'dist[\\/]index\.js' }
