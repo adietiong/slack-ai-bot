@@ -13,10 +13,12 @@ $ErrorActionPreference = "Stop"
 $dir = $PSScriptRoot
 $user = "$env:USERDOMAIN\$env:USERNAME"
 
+# Launch through run-hidden.vbs so wscript (no console) starts PowerShell
+# hidden — no window flash, and no admin/S4U required.
+$vbs = Join-Path $dir "run-hidden.vbs"
 function New-BotAction($script) {
   $path = Join-Path $dir $script
-  New-ScheduledTaskAction -Execute "powershell.exe" `
-    -Argument "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$path`""
+  New-ScheduledTaskAction -Execute "wscript.exe" -Argument "`"$vbs`" `"$path`""
 }
 
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries `
