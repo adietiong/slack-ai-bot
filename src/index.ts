@@ -100,5 +100,23 @@ app.action(DISCARD_ACTION, async ({ ack, action, body, client }) => {
   await handleDiscard(deps, proposalId, makePoster(client, channel, threadTs));
 });
 
+// @slack/socket-mode@1.3.6 drives its websocket through the `finity` state
+// machine, which has no transition for a 'server explicit disconnect' that
+// arrives while still in 'connecting'. It throws, nothing catches it, and the
+// process dies mid-handshake — the unattended-crash cause we kept blaming on
+// the scheduler. Swallow that one event so the client's own reconnect can
+// run; anything else stays fatal and exits for the guard task to restart.
+// Proper fix is socket-mode 2.x (drops finity) = a breaking Bolt 3 -> 4/5 bump.
+process.on("uncaughtException", (err) => {
+  const isSocketModeStateBug =
+    err instanceof Error && /Unhandled event '.*disconnect.*' in state/i.test(err.message);
+  if (isSocketModeStateBug) {
+    console.error(`[socket-mode] ignoring known state-machine bug: ${err.message}`);
+    return;
+  }
+  console.error("[fatal] uncaught exception:", err);
+  process.exit(1);
+});
+
 await app.start();
 console.log("⚡ slack-claude-code-bot running (socket mode)");
