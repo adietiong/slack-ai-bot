@@ -98,8 +98,6 @@ describe("runQuery timeout", () => {
   });
 });
 
-import { SYSTEM_PROMPT_APPEND } from "../src/claudeDriver.js";
-
 describe("buildQueryOptions systemPrompt (bug triage)", () => {
   it("appends the triage system prompt onto the claude_code preset", () => {
     const o = buildQueryOptions(cfg as any, {}, undefined) as any;
