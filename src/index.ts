@@ -5,6 +5,7 @@ import { loadConfig } from "./config.js";
 import { SessionManager } from "./sessionManager.js";
 import { ProposalStore, createTrelloMcpServer } from "./trelloTool.js";
 import { createReportsMcpServer } from "./reportsTool.js";
+import type { ReportExport } from "./reportExport.js";
 import { runQuery } from "./claudeDriver.js";
 import { downloadSlackImages } from "./slackFiles.js";
 import { createTrelloCard } from "./trelloClient.js";
@@ -23,7 +24,6 @@ await sessions.load();
 const proposals = new ProposalStore();
 const mcpServers: Record<string, unknown> = { trello: createTrelloMcpServer(proposals) };
 if (cfg.reportsDb) {
-  mcpServers.reports = createReportsMcpServer(cfg.reportsDb);
   console.log(`[startup] reports DB tool enabled (${cfg.reportsDb.database}, read-only)`);
 } else {
   console.log("[startup] reports DB tool disabled (REPORTS_DB_* not set)");
@@ -34,8 +34,16 @@ const deps: Deps = {
   sessions,
   proposals,
   createCard: createTrelloCard,
-  run: (prompt, resumeId, onProgress, images) =>
-    runQuery(prompt, cfg, mcpServers, resumeId, undefined, undefined, onProgress, images),
+  run: async (prompt, resumeId, onProgress, images) => {
+    // Fresh reports server per run so the captured query results belong to
+    // this reply only, even when two threads are being answered at once.
+    const exports: ReportExport[] = [];
+    const servers = cfg.reportsDb
+      ? { ...mcpServers, reports: createReportsMcpServer(cfg.reportsDb, (e) => exports.push(e)) }
+      : mcpServers;
+    const result = await runQuery(prompt, cfg, servers, resumeId, undefined, undefined, onProgress, images);
+    return { ...result, exports };
+  },
 };
 
 const app = new App({
@@ -55,6 +63,16 @@ function makePoster(client: any, channel: string, threadTs: string): SlackPoster
     },
     postBlocks: async (blocks) => {
       await client.chat.postMessage({ channel, thread_ts: threadTs, blocks, text: "Bug ticket proposal" });
+    },
+    uploadFile: async (filename, data, comment) => {
+      await client.files.uploadV2({
+        channel_id: channel,
+        thread_ts: threadTs,
+        file: data,
+        filename,
+        title: filename,
+        initial_comment: comment,
+      });
     },
   };
 }

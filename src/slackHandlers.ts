@@ -4,11 +4,13 @@ import type { ProposalStore } from "./trelloTool.js";
 import { approvalBlocks } from "./blocks.js";
 import type { createTrelloCard } from "./trelloClient.js";
 import type { ImageInput } from "./claudeDriver.js";
+import { buildReportWorkbook, reportFilename, type ReportExport } from "./reportExport.js";
 
 export interface SlackPoster {
   post(text: string): Promise<{ ts: string }>;
   update(ts: string, text: string): Promise<void>;
   postBlocks(blocks: any[]): Promise<void>;
+  uploadFile(filename: string, data: Buffer, comment: string): Promise<void>;
 }
 
 export interface Deps {
@@ -20,7 +22,7 @@ export interface Deps {
     resumeId: string | undefined,
     onProgress?: (phrase: string) => void,
     images?: ImageInput[]
-  ) => Promise<{ sessionId: string; text: string }>;
+  ) => Promise<{ sessionId: string; text: string; exports?: ReportExport[] }>;
   createCard: typeof createTrelloCard;
 }
 
@@ -58,6 +60,7 @@ export async function handleMessage(
     poster.update(placeholder.ts, `${star} *${word}* _(${secs}s)_`).catch(() => {});
   }, 1500);
 
+  let exports: ReportExport[] = [];
   try {
     const result = await deps.run(prompt, resumeId, (p) => {
       phrase = p;
@@ -65,15 +68,33 @@ export async function handleMessage(
     clearInterval(heartbeat);
     await deps.sessions.set(threadTs, result.sessionId);
     await poster.update(placeholder.ts, result.text || "(no output)");
-    console.log(`[handleMessage] thread=${threadTs} OK session=${result.sessionId} chars=${result.text.length}`);
+    exports = result.exports ?? [];
+    console.log(`[handleMessage] thread=${threadTs} OK session=${result.sessionId} chars=${result.text.length} queries=${exports.length}`);
   } catch (err: any) {
     clearInterval(heartbeat);
     console.error(`[handleMessage] thread=${threadTs} ERROR:`, err);
     await poster.update(placeholder.ts, `⚠️ Error: ${err?.message ?? String(err)}`);
     return;
   }
+  await attachReportExports(exports, poster);
   for (const proposal of deps.proposals.drainPending()) {
     await poster.postBlocks(approvalBlocks(proposal.id, proposal.ticket));
+  }
+}
+
+// Every DB query the run made that returned rows goes into one workbook on the
+// thread. A failed attach must not lose the answer that is already posted, so
+// it only reports itself.
+async function attachReportExports(exports: ReportExport[], poster: SlackPoster): Promise<void> {
+  try {
+    const file = await buildReportWorkbook(exports);
+    if (!file) {
+      return;
+    }
+    await poster.uploadFile(reportFilename(), file, "📊 Query results as Excel");
+  } catch (err: any) {
+    console.error("[handleMessage] Excel attach failed:", err);
+    await poster.post(`⚠️ Couldn't attach the Excel file: ${err?.message ?? String(err)}`);
   }
 }
 

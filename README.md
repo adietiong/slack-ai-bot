@@ -16,8 +16,9 @@ Manual steps:
 1. `npm install`
 2. Copy `.env.example` → `.env` and fill in tokens + repo paths.
 3. Create a Slack app with Socket Mode enabled. Bot scopes: `app_mentions:read`,
-   `chat:write`, `channels:history`, `groups:history`, and `files:read` (to read
-   pasted screenshots). Subscribe to events `app_mention` and `message.channels`.
+   `chat:write`, `channels:history`, `groups:history`, `files:read` (to read
+   pasted screenshots), and `files:write` (to attach Excel exports of query
+   results). Subscribe to events `app_mention` and `message.channels`.
    Install to the workspace.
 4. `npm test` — all suites green.
 5. `npm run dev` — starts the bot.
@@ -36,8 +37,11 @@ Manual steps:
   the system prompt. Put your schema names, routing docs, and product jargon
   there so they stay out of source. See `prompts/domain.example.md`.
 - **Reporting database** — set all five `REPORTS_DB_*` vars to expose a
-  read-only `query_reports_db` tool (single `SELECT`/`WITH`/`EXEC`, capped to
-  100 rows). Use a dedicated read-only DB login.
+  read-only `query_reports_db` tool (single `SELECT`/`WITH`/`EXEC`). Use a
+  dedicated read-only DB login. Claude sees the first 100 rows of each result;
+  every query that returns rows is attached to the thread as one Excel workbook
+  (one sheet per query, up to 50,000 rows each, plus a sheet with the SQL).
+  Needs the `files:write` scope.
 
 ## Run on a schedule (Windows)
 
