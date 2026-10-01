@@ -27,7 +27,9 @@ if (-not (Test-Path (Join-Path $repo "dist\index.js"))) {
 
 $logDir = Join-Path $repo "logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
-$stamp = Get-Date -Format "yyyyMMdd"
+# One log pair per launch: Start-Process can only overwrite, so a shared
+# per-day name would wipe that day's earlier log on every restart.
+$stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $out = Join-Path $logDir "bot-$stamp.out.log"
 $err = Join-Path $logDir "bot-$stamp.err.log"
 
