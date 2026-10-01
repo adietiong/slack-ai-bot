@@ -40,7 +40,7 @@ cat <<'DONE'
 Next steps:
   1. Edit .env — set SLACK_BOT_TOKEN, SLACK_APP_TOKEN, one Claude auth
      token (ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN), BACKEND_PATH,
-     FRONTEND_PATH, and the TRELLO_* values.
+     and FRONTEND_PATH.
   2. Create a Slack app (Socket Mode on). Bot scopes:
      app_mentions:read, chat:write, channels:history, groups:history,
      files:read. Subscribe to events: app_mention, message.channels.

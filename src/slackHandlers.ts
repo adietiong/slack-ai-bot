@@ -1,29 +1,23 @@
 import type { Config } from "./config.js";
 import type { SessionManager } from "./sessionManager.js";
-import type { ProposalStore } from "./trelloTool.js";
-import { approvalBlocks } from "./blocks.js";
-import type { createTrelloCard } from "./trelloClient.js";
 import type { ImageInput } from "./claudeDriver.js";
 import { buildReportWorkbook, reportFilename, type ReportExport } from "./reportExport.js";
 
 export interface SlackPoster {
   post(text: string): Promise<{ ts: string }>;
   update(ts: string, text: string): Promise<void>;
-  postBlocks(blocks: any[]): Promise<void>;
   uploadFile(filename: string, data: Buffer, comment: string): Promise<void>;
 }
 
 export interface Deps {
   cfg: Config;
   sessions: SessionManager;
-  proposals: ProposalStore;
   run: (
     prompt: string,
     resumeId: string | undefined,
     onProgress?: (phrase: string) => void,
     images?: ImageInput[]
   ) => Promise<{ sessionId: string; text: string; exports?: ReportExport[] }>;
-  createCard: typeof createTrelloCard;
 }
 
 export async function handleMessage(
@@ -77,9 +71,6 @@ export async function handleMessage(
     return;
   }
   await attachReportExports(exports, poster);
-  for (const proposal of deps.proposals.drainPending()) {
-    await poster.postBlocks(approvalBlocks(proposal.id, proposal.ticket));
-  }
 }
 
 // Every DB query the run made that returned rows goes into one workbook on the
@@ -95,41 +86,5 @@ async function attachReportExports(exports: ReportExport[], poster: SlackPoster)
   } catch (err: any) {
     console.error("[handleMessage] Excel attach failed:", err);
     await poster.post(`⚠️ Couldn't attach the Excel file: ${err?.message ?? String(err)}`);
-  }
-}
-
-const STALE_MSG = "⚠️ That proposal is no longer available (already actioned or the bot restarted). Ask again if you still want a ticket.";
-
-export async function handleApprove(
-  deps: Deps,
-  proposalId: string,
-  poster: SlackPoster
-): Promise<void> {
-  const proposal = deps.proposals.take(proposalId);
-  if (!proposal) {
-    await poster.post(STALE_MSG);
-    return;
-  }
-  try {
-    const card = await deps.createCard(
-      { key: deps.cfg.trelloKey, token: deps.cfg.trelloToken, listId: deps.cfg.trelloListId },
-      proposal.ticket
-    );
-    await poster.post(`✅ Trello card created: ${card.url}`);
-  } catch (err: any) {
-    await poster.post(`⚠️ Trello error: ${err?.message ?? String(err)}`);
-  }
-}
-
-export async function handleDiscard(
-  deps: Deps,
-  proposalId: string,
-  poster: SlackPoster
-): Promise<void> {
-  const taken = deps.proposals.take(proposalId);
-  if (taken) {
-    await poster.post("🗑️ Ticket discarded — nothing created.");
-  } else {
-    await poster.post(STALE_MSG);
   }
 }

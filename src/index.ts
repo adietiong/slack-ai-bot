@@ -3,26 +3,15 @@ import pkg from "@slack/bolt";
 const { App } = pkg;
 import { loadConfig } from "./config.js";
 import { SessionManager } from "./sessionManager.js";
-import { ProposalStore, createTrelloMcpServer } from "./trelloTool.js";
 import { createReportsMcpServer } from "./reportsTool.js";
 import type { ReportExport } from "./reportExport.js";
 import { runQuery } from "./claudeDriver.js";
 import { downloadSlackImages } from "./slackFiles.js";
-import { createTrelloCard } from "./trelloClient.js";
-import {
-  handleMessage,
-  handleApprove,
-  handleDiscard,
-  type SlackPoster,
-  type Deps,
-} from "./slackHandlers.js";
-import { APPROVE_ACTION, DISCARD_ACTION } from "./blocks.js";
+import { handleMessage, type SlackPoster, type Deps } from "./slackHandlers.js";
 
 const cfg = loadConfig(process.env);
 const sessions = new SessionManager(cfg.sessionsFile);
 await sessions.load();
-const proposals = new ProposalStore();
-const mcpServers: Record<string, unknown> = { trello: createTrelloMcpServer(proposals) };
 if (cfg.reportsDb) {
   console.log(`[startup] reports DB tool enabled (${cfg.reportsDb.database}, read-only)`);
 } else {
@@ -32,15 +21,13 @@ if (cfg.reportsDb) {
 const deps: Deps = {
   cfg,
   sessions,
-  proposals,
-  createCard: createTrelloCard,
   run: async (prompt, resumeId, onProgress, images) => {
     // Fresh reports server per run so the captured query results belong to
     // this reply only, even when two threads are being answered at once.
     const exports: ReportExport[] = [];
-    const servers = cfg.reportsDb
-      ? { ...mcpServers, reports: createReportsMcpServer(cfg.reportsDb, (e) => exports.push(e)) }
-      : mcpServers;
+    const servers: Record<string, unknown> = cfg.reportsDb
+      ? { reports: createReportsMcpServer(cfg.reportsDb, (e) => exports.push(e)) }
+      : {};
     const result = await runQuery(prompt, cfg, servers, resumeId, undefined, undefined, onProgress, images);
     return { ...result, exports };
   },
@@ -60,9 +47,6 @@ function makePoster(client: any, channel: string, threadTs: string): SlackPoster
     },
     update: async (ts, text) => {
       await client.chat.update({ channel, ts, text });
-    },
-    postBlocks: async (blocks) => {
-      await client.chat.postMessage({ channel, thread_ts: threadTs, blocks, text: "Bug ticket proposal" });
     },
     uploadFile: async (filename, data, comment) => {
       await client.files.uploadV2({
@@ -100,22 +84,6 @@ app.message(async ({ message, client }) => {
   }
   const images = await downloadSlackImages(m.files, cfg.slackBotToken);
   await handleMessage(deps, m.thread_ts, (m.text ?? "").trim(), makePoster(client, m.channel, m.thread_ts), images);
-});
-
-app.action(APPROVE_ACTION, async ({ ack, action, body, client }) => {
-  await ack();
-  const proposalId = (action as any).value;
-  const channel = (body as any).channel.id;
-  const threadTs = (body as any).message.thread_ts ?? (body as any).message.ts;
-  await handleApprove(deps, proposalId, makePoster(client, channel, threadTs));
-});
-
-app.action(DISCARD_ACTION, async ({ ack, action, body, client }) => {
-  await ack();
-  const proposalId = (action as any).value;
-  const channel = (body as any).channel.id;
-  const threadTs = (body as any).message.thread_ts ?? (body as any).message.ts;
-  await handleDiscard(deps, proposalId, makePoster(client, channel, threadTs));
 });
 
 // @slack/socket-mode@1.3.6 drives its websocket through the `finity` state

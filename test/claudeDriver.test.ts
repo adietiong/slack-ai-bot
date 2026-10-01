@@ -10,11 +10,11 @@ import {
 const cfg = {
   slackBotToken: "", slackAppToken: "", anthropicApiKey: "",
   backendPath: "/be", frontendPath: "/fe",
-  trelloKey: "", trelloToken: "", trelloListId: "", sessionsFile: "",
+  sessionsFile: "",
 };
 
 describe("permissionDecision", () => {
-  it("allows read-only + the trello propose tool", () => {
+  it("allows read-only + the reports query tool", () => {
     for (const name of ALLOWED_TOOLS) {
       expect(permissionDecision(name).behavior).toBe("allow");
     }
@@ -106,8 +106,9 @@ describe("buildQueryOptions systemPrompt (bug triage)", () => {
       preset: "claude_code",
       append: BASE_SYSTEM_PROMPT,
     });
-    expect(BASE_SYSTEM_PROMPT).toMatch(/propose_bug_ticket/);
+    expect(BASE_SYSTEM_PROMPT).toMatch(/Bug ticket/);
     expect(BASE_SYSTEM_PROMPT).toMatch(/follow-up questions/i);
+    expect(BASE_SYSTEM_PROMPT).not.toMatch(/trello|propose_bug_ticket/i);
   });
 });
 
@@ -118,7 +119,6 @@ describe("progressPhrase", () => {
     expect(progressPhrase("Grep")).toMatch(/search/i);
     expect(progressPhrase("Glob")).toMatch(/files/i);
     expect(progressPhrase("Read", { file_path: "C:/x/AgentService.cs" })).toBe("Reading AgentService.cs…");
-    expect(progressPhrase("mcp__trello__propose_bug_ticket")).toMatch(/ticket/i);
     expect(progressPhrase("Whatever")).toBe("Working…");
   });
 });

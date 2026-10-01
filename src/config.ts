@@ -10,9 +10,6 @@ export interface Config {
   claudeCodeOAuthToken: string;
   backendPath: string;
   frontendPath: string;
-  trelloKey: string;
-  trelloToken: string;
-  trelloListId: string;
   sessionsFile: string;
   // Optional domain knowledge appended to the base system prompt. Loaded from
   // the file at DOMAIN_PROMPT_FILE (if set and readable). Keep org-specific
@@ -51,9 +48,6 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     claudeCodeOAuthToken: env.CLAUDE_CODE_OAUTH_TOKEN ?? "",
     backendPath: get("BACKEND_PATH"),
     frontendPath: get("FRONTEND_PATH"),
-    trelloKey: get("TRELLO_KEY"),
-    trelloToken: get("TRELLO_TOKEN"),
-    trelloListId: get("TRELLO_LIST_ID"),
     sessionsFile: env.SESSIONS_FILE || "./sessions.json",
     domainPrompt: loadDomainPrompt(env.DOMAIN_PROMPT_FILE),
   };

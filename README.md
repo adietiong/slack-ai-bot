@@ -1,7 +1,7 @@
 # slack-claude-code-bot
 
 Two-way chat between Slack and Claude Code, **read-only** over one or more of your
-code repositories, with human-gated Trello bug tickets. Mention the bot in a
+code repositories, with bug triage. Mention the bot in a
 channel and it answers questions about your codebase in the thread; reply in the
 thread to keep the same Claude session and context.
 
@@ -27,8 +27,9 @@ Manual steps:
 
 - `@bot why does this endpoint return 500?` — starts a thread; reply in-thread to
   continue with full context. Paste a screenshot and the bot will read it.
-- When Claude proposes a bug ticket, click **Create Trello card** to file it or
-  **Discard** to drop it.
+- When Claude confirms a bug, it ends its reply with a **Bug ticket** section
+  (title, severity, repro, root cause) to copy into your tracker. The bot never
+  files tickets itself.
 
 ## Optional features
 
@@ -67,6 +68,6 @@ Remove them with `scripts\uninstall-tasks.ps1`.
 ## Safety
 
 Read-only: the bot may only `Read`, `Grep`, `Glob` the configured repos. No
-edits, commits, pushes, or shell. Trello card creation is the only write side
-effect and is always behind a human button click. The reporting-database tool,
-if enabled, rejects any non-`SELECT`/`WITH`/`EXEC` statement.
+edits, commits, pushes, or shell, and no writes to any outside service. The
+reporting-database tool, if enabled, rejects any non-`SELECT`/`WITH`/`EXEC`
+statement.

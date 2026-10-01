@@ -7,16 +7,12 @@ const full = {
   ANTHROPIC_API_KEY: "sk",
   BACKEND_PATH: "/be",
   FRONTEND_PATH: "/fe",
-  TRELLO_KEY: "k",
-  TRELLO_TOKEN: "t",
-  TRELLO_LIST_ID: "l",
 };
 
 describe("loadConfig", () => {
   it("maps env to a Config object", () => {
     const c = loadConfig(full as any);
     expect(c.backendPath).toBe("/be");
-    expect(c.trelloListId).toBe("l");
     expect(c.sessionsFile).toBe("./sessions.json");
   });
 
