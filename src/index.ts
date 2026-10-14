@@ -6,7 +6,7 @@ import { SessionManager } from "./sessionManager.js";
 import { createReportsMcpServer } from "./reportsTool.js";
 import type { ReportExport } from "./reportExport.js";
 import { runQuery } from "./claudeDriver.js";
-import { downloadSlackImages } from "./slackFiles.js";
+import { downloadSlackImages, readSlackSpreadsheets } from "./slackFiles.js";
 import { handleMessage, type SlackPoster, type Deps } from "./slackHandlers.js";
 
 const cfg = loadConfig(process.env);
@@ -68,7 +68,8 @@ app.event("app_mention", async ({ event, client }) => {
   const channel = (event as any).channel;
   const prompt = (event as any).text.replace(/<@[^>]+>/g, "").trim();
   const images = await downloadSlackImages((event as any).files, cfg.slackBotToken);
-  await handleMessage(deps, threadTs, prompt, makePoster(client, channel, threadTs), images);
+  const sheets = await readSlackSpreadsheets((event as any).files, cfg.slackBotToken);
+  await handleMessage(deps, threadTs, [prompt, sheets].filter(Boolean).join("\n\n"), makePoster(client, channel, threadTs), images);
 });
 
 // Follow-up: a non-bot message inside a known thread continues that session.
@@ -83,7 +84,8 @@ app.message(async ({ message, client }) => {
     return; // only continue threads the bot already owns
   }
   const images = await downloadSlackImages(m.files, cfg.slackBotToken);
-  await handleMessage(deps, m.thread_ts, (m.text ?? "").trim(), makePoster(client, m.channel, m.thread_ts), images);
+  const sheets = await readSlackSpreadsheets(m.files, cfg.slackBotToken);
+  await handleMessage(deps, m.thread_ts, [(m.text ?? "").trim(), sheets].filter(Boolean).join("\n\n"), makePoster(client, m.channel, m.thread_ts), images);
 });
 
 // @slack/socket-mode@1.3.6 drives its websocket through the `finity` state
