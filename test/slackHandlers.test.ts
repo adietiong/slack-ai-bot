@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { handleMessage } from "../src/slackHandlers.js";
+import { handleMessage, routeEvent } from "../src/slackHandlers.js";
 import { SessionManager } from "../src/sessionManager.js";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -101,5 +101,58 @@ describe("handleMessage", () => {
     const p = poster();
     await handleMessage(deps, "t1", "q", p);
     expect(p.updates[0][1]).toMatch(/sdk boom/);
+  });
+});
+
+describe("routeEvent", () => {
+  const sessions = { get: (ts: string) => (ts === "owned" ? "sess-1" : undefined) };
+
+  it("answers an @mention in an owned thread once, whichever event arrives first", () => {
+    const m = { channel: "C1", ts: "2", thread_ts: "owned", text: "<@U1> hi" };
+    const a = new Set<string>();
+    expect(routeEvent("mention", m, sessions, a)).toBe("owned");
+    expect(routeEvent("message", m, sessions, a)).toBeUndefined();
+    const b = new Set<string>();
+    expect(routeEvent("message", m, sessions, b)).toBe("owned");
+    expect(routeEvent("mention", m, sessions, b)).toBeUndefined();
+  });
+
+  it("still answers via app_mention alone when no message event comes (private channel)", () => {
+    expect(routeEvent("mention", { channel: "G1", ts: "2", thread_ts: "owned" }, sessions, new Set())).toBe("owned");
+  });
+
+  it("keeps messages with the same ts in different channels apart", () => {
+    const seen = new Set<string>();
+    expect(routeEvent("mention", { channel: "C1", ts: "9" }, sessions, seen)).toBe("9");
+    expect(routeEvent("mention", { channel: "C2", ts: "9" }, sessions, seen)).toBe("9");
+  });
+
+  it("starts a thread from a top-level @mention or one in a thread it doesn't own", () => {
+    expect(routeEvent("mention", { channel: "C1", ts: "5" }, sessions, new Set())).toBe("5");
+    expect(routeEvent("mention", { channel: "C1", ts: "6", thread_ts: "other" }, sessions, new Set())).toBe("other");
+  });
+
+  it("continues only owned threads for plain and file_share messages", () => {
+    expect(routeEvent("message", { channel: "C1", ts: "3", thread_ts: "owned" }, sessions, new Set())).toBe("owned");
+    expect(routeEvent("message", { channel: "C1", ts: "3", thread_ts: "owned", subtype: "file_share" }, sessions, new Set())).toBe("owned");
+    expect(routeEvent("message", { channel: "C1", ts: "3", thread_ts: "other" }, sessions, new Set())).toBeUndefined();
+    expect(routeEvent("message", { channel: "C1", ts: "3" }, sessions, new Set())).toBeUndefined();
+  });
+
+  it("ignores edits, bot messages and empty events without marking them seen", () => {
+    const seen = new Set<string>();
+    expect(routeEvent("message", { channel: "C1", ts: "3", thread_ts: "owned", subtype: "message_changed" }, sessions, seen)).toBeUndefined();
+    expect(routeEvent("message", { channel: "C1", ts: "3", thread_ts: "owned", bot_id: "B1" }, sessions, seen)).toBeUndefined();
+    expect(routeEvent("mention", { channel: "C1", ts: "3", bot_id: "B1" }, sessions, seen)).toBeUndefined();
+    expect(routeEvent("mention", undefined, sessions, seen)).toBeUndefined();
+    expect(seen.size).toBe(0);
+  });
+
+  it("forgets the oldest entries past 500", () => {
+    const seen = new Set<string>();
+    for (let i = 0; i < 501; i++) { routeEvent("mention", { channel: "C1", ts: String(i) }, sessions, seen); }
+    expect(seen.size).toBe(500);
+    expect(seen.has("C1:0")).toBe(false);
+    expect(routeEvent("mention", { channel: "C1", ts: "0" }, sessions, seen)).toBe("0");
   });
 });

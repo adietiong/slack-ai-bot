@@ -6,8 +6,8 @@ import { SessionManager } from "./sessionManager.js";
 import { createReportsMcpServer } from "./reportsTool.js";
 import type { ReportExport } from "./reportExport.js";
 import { runQuery } from "./claudeDriver.js";
-import { downloadSlackImages, readSlackSpreadsheets } from "./slackFiles.js";
-import { handleMessage, type SlackPoster, type Deps } from "./slackHandlers.js";
+import { downloadSlackImages, readSlackSpreadsheets, readSlackTables } from "./slackFiles.js";
+import { handleMessage, routeEvent, type SlackPoster, type Deps } from "./slackHandlers.js";
 
 const cfg = loadConfig(process.env);
 const sessions = new SessionManager(cfg.sessionsFile);
@@ -61,31 +61,30 @@ function makePoster(client: any, channel: string, threadTs: string): SlackPoster
   };
 }
 
+// Text + spreadsheets + pasted tables + images of one Slack message, then answer it.
+// Only a mention's own text drops <@…> tags; a follow-up keeps "ask <@U…>" intact.
+async function answer(m: any, threadTs: string, client: any, stripMentions: boolean): Promise<void> {
+  const text: string = m.text ?? "";
+  const prompt = (stripMentions ? text.replace(/<@[^>]+>/g, "") : text).trim();
+  const images = await downloadSlackImages(m.files, cfg.slackBotToken);
+  const sheets = await readSlackSpreadsheets(m.files, cfg.slackBotToken);
+  const tables = readSlackTables(m);
+  await handleMessage(deps, threadTs, [prompt, sheets, tables].filter(Boolean).join("\n\n"), makePoster(client, m.channel, threadTs), images);
+}
+
+// An @mention in an owned thread fires both handlers; this lets only the first answer.
+const seen = new Set<string>();
+
 // New question: @mention starts a new thread (threadTs = the mention's own ts).
 app.event("app_mention", async ({ event, client }) => {
-  if ((event as any).bot_id) { return; }
-  const threadTs = (event as any).thread_ts ?? (event as any).ts;
-  const channel = (event as any).channel;
-  const prompt = (event as any).text.replace(/<@[^>]+>/g, "").trim();
-  const images = await downloadSlackImages((event as any).files, cfg.slackBotToken);
-  const sheets = await readSlackSpreadsheets((event as any).files, cfg.slackBotToken);
-  await handleMessage(deps, threadTs, [prompt, sheets].filter(Boolean).join("\n\n"), makePoster(client, channel, threadTs), images);
+  const threadTs = routeEvent("mention", event, sessions, seen);
+  if (threadTs) { await answer(event, threadTs, client, true); }
 });
 
 // Follow-up: a non-bot message inside a known thread continues that session.
 app.message(async ({ message, client }) => {
-  const m = message as any;
-  // file_share is a "subtype" but it's a real user message with an attachment.
-  const isFileShare = m.subtype === "file_share";
-  if ((m.subtype && !isFileShare) || m.bot_id || !m.thread_ts) {
-    return; // ignore bot echoes, edits, and non-threaded chatter
-  }
-  if (!sessions.get(m.thread_ts)) {
-    return; // only continue threads the bot already owns
-  }
-  const images = await downloadSlackImages(m.files, cfg.slackBotToken);
-  const sheets = await readSlackSpreadsheets(m.files, cfg.slackBotToken);
-  await handleMessage(deps, m.thread_ts, [(m.text ?? "").trim(), sheets].filter(Boolean).join("\n\n"), makePoster(client, m.channel, m.thread_ts), images);
+  const threadTs = routeEvent("message", message, sessions, seen);
+  if (threadTs) { await answer(message, threadTs, client, false); }
 });
 
 // @slack/socket-mode@1.3.6 drives its websocket through the `finity` state
