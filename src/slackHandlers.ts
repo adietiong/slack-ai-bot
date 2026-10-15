@@ -20,6 +20,44 @@ export interface Deps {
   ) => Promise<{ sessionId: string; text: string; exports?: ReportExport[] }>;
 }
 
+// Returns the thread to answer in, or undefined to ignore the event.
+//  - app_mention: any non-bot @mention (threadTs = the mention's own ts when top-level).
+//  - message: a non-bot reply in a thread the bot already owns.
+// Slack fires BOTH for an @mention inside an owned thread; `seen` (channel:ts)
+// lets whichever arrives first answer and drops the other. Dedupe rather than
+// "mentions belong to X" because message.groups may not be subscribed, so in a
+// private channel only app_mention arrives.
+const SEEN_MAX = 500;
+export function routeEvent(
+  kind: "mention" | "message",
+  m: any,
+  sessions: Pick<SessionManager, "get">,
+  seen: Set<string>
+): string | undefined {
+  if (!m || m.bot_id) {
+    return undefined;
+  }
+  let threadTs: string | undefined;
+  if (kind === "mention") {
+    threadTs = m.thread_ts ?? m.ts;
+  } else if ((!m.subtype || m.subtype === "file_share") && m.thread_ts && sessions.get(m.thread_ts)) {
+    // file_share is a "subtype" but it's a real user message with an attachment.
+    threadTs = m.thread_ts;
+  }
+  if (!threadTs) {
+    return undefined;
+  }
+  const key = `${m.channel}:${m.ts}`;
+  if (seen.has(key)) {
+    return undefined;
+  }
+  seen.add(key);
+  if (seen.size > SEEN_MAX) {
+    seen.delete(seen.values().next().value as string); // oldest first
+  }
+  return threadTs;
+}
+
 export async function handleMessage(
   deps: Deps,
   threadTs: string,
