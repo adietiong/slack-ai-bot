@@ -52,7 +52,7 @@ function getPool(cfg: ReportsDbConfig): Promise<sql.ConnectionPool> {
         trustServerCertificate: true,
         readOnlyIntent: true,
       },
-      requestTimeout: 20000,
+      requestTimeout: 120000, // a full export (up to EXPORT_MAX_ROWS) can take well over 20s
       connectionTimeout: 15000,
       pool: { max: 2, min: 0, idleTimeoutMillis: 30000 },
     })

@@ -91,7 +91,8 @@ export interface DriverResult {
   text: string;
 }
 
-export const QUERY_TIMEOUT_MS = 300_000;
+// Big reports need several discovery queries plus a large export; 5 min was cutting them off.
+export const QUERY_TIMEOUT_MS = 600_000;
 
 // An image to hand to Claude as a content block (base64-encoded bytes).
 export interface ImageInput {
