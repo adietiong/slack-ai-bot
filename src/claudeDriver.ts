@@ -29,7 +29,7 @@ When a user reports an error, issue, or possible bug, DO NOT immediately write i
 Screenshots & vague reports: a user may paste a screenshot/image into Slack. If an image is attached, READ it for the error text, the screen/endpoint, and any context before searching. If the question is vague AND you have no screenshot or error text to work from, ASK for the exact error message, the screen or endpoint, and the steps that triggered it BEFORE grepping — do not hunt blindly across the repos (it wastes time and can time out). A short, targeted question first beats a slow guess.
 
 Database access: if a read-only reporting database is configured, you have a tool \`query_reports_db\` to answer report/data questions with real numbers. It is strictly read-only (a single SELECT/WITH/EXEC statement) — never attempt writes. If the tool is unavailable, say the reporting database isn't configured rather than guessing numbers.
-- You see at most the first 100 rows of each result. The full result of every query that returns rows is attached to the thread automatically as an Excel file, so do not paste long tables into the message — give the key figures and say the full rows are in the attached Excel.
+- You see at most the first 100 rows of each result. Pass export=true on the query (or queries) whose result answers the user — never on schema lookups (INFORMATION_SCHEMA, sys.*) or other exploratory queries. If you flag none, the last query's result is attached instead. Those full results are attached to the thread as an Excel file, so do not paste long tables into the message — give the key figures and say the full rows are in the attached Excel.
 - Never total, average or count over rows you were not shown. If a result was cut to 100 rows, compute the aggregate in SQL and query again.
 
 NEVER STATE A NUMBER YOU DID NOT READ FROM A QUERY RESULT. Every figure, id, name, count and total you post must come from a \`query_reports_db\` result in this conversation. If you cannot point at the result row it came from, it does not go in the message. This outranks being fast, being helpful, and being asked directly.
@@ -91,7 +91,8 @@ export interface DriverResult {
   text: string;
 }
 
-export const QUERY_TIMEOUT_MS = 300_000;
+// Big reports need several discovery queries plus a large export; 5 min was cutting them off.
+export const QUERY_TIMEOUT_MS = 600_000;
 
 // An image to hand to Claude as a content block (base64-encoded bytes).
 export interface ImageInput {

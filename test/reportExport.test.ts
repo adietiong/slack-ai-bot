@@ -39,8 +39,8 @@ describe("buildReportWorkbook", () => {
 
   it("skips empty results and records each exported query's SQL", async () => {
     const buf = await buildReportWorkbook([
-      exp({ sql: "SELECT id FROM none WHERE 1=0" }),
-      exp({ sql: "SELECT id FROM t", columns: ["id"], rows: [{ id: 1 }, { id: 2 }], rowCount: 60000, truncated: true }),
+      exp({ sql: "SELECT id FROM none WHERE 1=0", export: true }),
+      exp({ sql: "SELECT id FROM t", columns: ["id"], rows: [{ id: 1 }, { id: 2 }], rowCount: 60000, truncated: true, export: true }),
     ]);
     const wb = await load(buf!);
     expect(wb.worksheets.map((w) => w.name)).toEqual(["Query 1", "Queries"]);
@@ -49,6 +49,58 @@ describe("buildReportWorkbook", () => {
     expect(qs.getCell("B2").value).toBe(60000);
     expect(qs.getCell("C2").value).toBe(2);
     expect(qs.getCell("D2").value).toBe("SELECT id FROM t");
+  });
+
+  it("exports only the queries marked export, leaving discovery queries out", async () => {
+    const buf = await buildReportWorkbook([
+      exp({ sql: "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES", columns: ["TABLE_NAME"], rows: [{ TABLE_NAME: "Units" }], rowCount: 1 }),
+      exp({ sql: "SELECT y, n FROM sales", columns: ["y", "n"], rows: [{ y: 2025, n: 7 }], rowCount: 1, export: true }),
+      exp({ sql: "SELECT id FROM lookup", columns: ["id"], rows: [{ id: 1 }], rowCount: 1 }),
+    ]);
+    const wb = await load(buf!);
+    expect(wb.worksheets.map((w) => w.name)).toEqual(["Query 1", "Queries"]);
+    expect(wb.getWorksheet("Query 1")!.getCell("A1").value).toBe("y");
+    expect(wb.getWorksheet("Queries")!.getCell("D2").value).toBe("SELECT y, n FROM sales");
+  });
+
+  it("writes one sheet per marked query, in run order", async () => {
+    const buf = await buildReportWorkbook([
+      exp({ sql: "SELECT a FROM x", columns: ["a"], rows: [{ a: 1 }], rowCount: 1, export: true }),
+      exp({ sql: "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES", columns: ["TABLE_NAME"], rows: [{ TABLE_NAME: "Units" }], rowCount: 1 }),
+      exp({ sql: "SELECT b FROM y", columns: ["b"], rows: [{ b: 2 }], rowCount: 1, export: true }),
+    ]);
+    const wb = await load(buf!);
+    expect(wb.worksheets.map((w) => w.name)).toEqual(["Query 1", "Query 2", "Queries"]);
+    expect(wb.getWorksheet("Query 2")!.getCell("A1").value).toBe("b");
+    expect(wb.getWorksheet("Queries")!.getCell("D3").value).toBe("SELECT b FROM y");
+  });
+
+  it("attaches nothing when the marked query is empty, even if an unmarked one had rows", async () => {
+    expect(
+      await buildReportWorkbook([
+        exp({ sql: "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES", columns: ["TABLE_NAME"], rows: [{ TABLE_NAME: "Units" }], rowCount: 1 }),
+        exp({ sql: "SELECT y FROM sales WHERE 1=0", columns: ["y"], export: true }),
+      ])
+    ).toBeNull();
+  });
+
+  it("falls back to the last query when none is marked", async () => {
+    const buf = await buildReportWorkbook([
+      exp({ sql: "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES", columns: ["TABLE_NAME"], rows: [{ TABLE_NAME: "Units" }], rowCount: 1 }),
+      exp({ sql: "SELECT y FROM sales", columns: ["y"], rows: [{ y: 2025 }], rowCount: 1 }),
+    ]);
+    const wb = await load(buf!);
+    expect(wb.worksheets.map((w) => w.name)).toEqual(["Query 1", "Queries"]);
+    expect(wb.getWorksheet("Query 1")!.getCell("A1").value).toBe("y");
+  });
+
+  it("attaches nothing when the last unmarked query is empty, rather than a discovery query", async () => {
+    expect(
+      await buildReportWorkbook([
+        exp({ sql: "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES", columns: ["TABLE_NAME"], rows: [{ TABLE_NAME: "Units" }], rowCount: 1 }),
+        exp({ sql: "SELECT y FROM sales WHERE 1=0", columns: ["y"] }),
+      ])
+    ).toBeNull();
   });
 
   it("flattens values Excel can't hold natively", async () => {

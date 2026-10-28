@@ -6,6 +6,9 @@ import type { ReportsQueryResult } from "./reportsDb.js";
 // model's text, so the file can only hold numbers the database returned.
 export interface ReportExport extends ReportsQueryResult {
   sql: string;
+  // Set by the model on the queries that answer the user, so schema lookups
+  // and other discovery queries stay out of the file.
+  export?: boolean;
 }
 
 const MAX_CELL_CHARS = 32_767; // Excel's hard per-cell limit
@@ -45,10 +48,18 @@ function columnWidth(column: string, rows: Record<string, unknown>[]): number {
   return Math.min(Math.max(max + 2, 8), 60);
 }
 
-// One sheet per query that returned rows, plus a "Queries" sheet recording the
-// SQL behind each one. Returns null when there is nothing worth attaching.
+// The queries the model marked export=true, or the last query run when it
+// marked none (the answer usually comes after the discovery queries).
+export function selectExports(exports: ReportExport[]): ReportExport[] {
+  const marked = exports.filter((e) => e.export);
+  return marked.length > 0 ? marked : exports.slice(-1);
+}
+
+// One sheet per selected query that returned rows, plus a "Queries" sheet
+// recording the SQL behind each one. Returns null when there is nothing worth
+// attaching.
 export async function buildReportWorkbook(exports: ReportExport[]): Promise<Buffer | null> {
-  const withRows = exports.filter((e) => e.rows.length > 0);
+  const withRows = selectExports(exports).filter((e) => e.rows.length > 0);
   if (withRows.length === 0) {
     return null;
   }
