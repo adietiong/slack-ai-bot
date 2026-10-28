@@ -63,6 +63,27 @@ describe("buildReportWorkbook", () => {
     expect(wb.getWorksheet("Queries")!.getCell("D2").value).toBe("SELECT y, n FROM sales");
   });
 
+  it("writes one sheet per marked query, in run order", async () => {
+    const buf = await buildReportWorkbook([
+      exp({ sql: "SELECT a FROM x", columns: ["a"], rows: [{ a: 1 }], rowCount: 1, export: true }),
+      exp({ sql: "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES", columns: ["TABLE_NAME"], rows: [{ TABLE_NAME: "Units" }], rowCount: 1 }),
+      exp({ sql: "SELECT b FROM y", columns: ["b"], rows: [{ b: 2 }], rowCount: 1, export: true }),
+    ]);
+    const wb = await load(buf!);
+    expect(wb.worksheets.map((w) => w.name)).toEqual(["Query 1", "Query 2", "Queries"]);
+    expect(wb.getWorksheet("Query 2")!.getCell("A1").value).toBe("b");
+    expect(wb.getWorksheet("Queries")!.getCell("D3").value).toBe("SELECT b FROM y");
+  });
+
+  it("attaches nothing when the marked query is empty, even if an unmarked one had rows", async () => {
+    expect(
+      await buildReportWorkbook([
+        exp({ sql: "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES", columns: ["TABLE_NAME"], rows: [{ TABLE_NAME: "Units" }], rowCount: 1 }),
+        exp({ sql: "SELECT y FROM sales WHERE 1=0", columns: ["y"], export: true }),
+      ])
+    ).toBeNull();
+  });
+
   it("falls back to the last query when none is marked", async () => {
     const buf = await buildReportWorkbook([
       exp({ sql: "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES", columns: ["TABLE_NAME"], rows: [{ TABLE_NAME: "Units" }], rowCount: 1 }),
