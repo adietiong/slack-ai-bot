@@ -111,7 +111,7 @@ export async function handleMessage(
   await attachReportExports(exports, poster);
 }
 
-// Every DB query the run made that returned rows goes into one workbook on the
+// The run's answer queries (see selectExports) go into one workbook on the
 // thread. A failed attach must not lose the answer that is already posted, so
 // it only reports itself.
 async function attachReportExports(exports: ReportExport[], poster: SlackPoster): Promise<void> {

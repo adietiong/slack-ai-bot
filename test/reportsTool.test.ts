@@ -10,9 +10,10 @@ describe("runReportsQuery", () => {
     const queryFn = vi.fn(async () => ({ columns: ["id"], rows, rowCount: 250, truncated: false }));
     const captured: ReportExport[] = [];
 
-    const out = await runReportsQuery("SELECT id FROM t", cfg, (e) => captured.push(e), queryFn);
+    const out = await runReportsQuery("SELECT id FROM t", cfg, (e) => captured.push(e), queryFn, true);
 
     expect(queryFn).toHaveBeenCalledWith("SELECT id FROM t", cfg, EXPORT_MAX_ROWS);
+    expect(captured[0].export).toBe(true);
     const text = out.content[0].text;
     expect(text).toContain("showing first 100 of 250");
     expect(text).toMatch(/attached to the thread as an Excel file/);
@@ -25,8 +26,16 @@ describe("runReportsQuery", () => {
   it("says when the export itself was capped", async () => {
     const rows = [{ id: 1 }];
     const queryFn = vi.fn(async () => ({ columns: ["id"], rows, rowCount: 80000, truncated: true }));
-    const out = await runReportsQuery("SELECT id FROM t", cfg, () => {}, queryFn);
+    const out = await runReportsQuery("SELECT id FROM t", cfg, () => {}, queryFn, true);
     expect(out.content[0].text).toContain("first 1 of 80000 rows");
+  });
+
+  it("captures an unmarked query with export=false and promises no attachment", async () => {
+    const queryFn = vi.fn(async () => ({ columns: ["id"], rows: [{ id: 1 }], rowCount: 1, truncated: false }));
+    const captured: ReportExport[] = [];
+    const out = await runReportsQuery("SELECT id FROM t", cfg, (e) => captured.push(e), queryFn);
+    expect(captured[0].export).toBe(false);
+    expect(out.content[0].text).not.toMatch(/Excel/);
   });
 
   it("does not promise an attachment when nothing captures results", async () => {

@@ -15,15 +15,16 @@ export async function runReportsQuery(
   sql: string,
   cfg: ReportsDbConfig,
   onResult?: (e: ReportExport) => void,
-  queryFn: QueryFn = queryReportsDb
+  queryFn: QueryFn = queryReportsDb,
+  exportResult = false
 ): Promise<{ content: Array<{ type: "text"; text: string }>; isError?: boolean }> {
   try {
     const r = await queryFn(sql, cfg, EXPORT_MAX_ROWS);
-    onResult?.({ sql, ...r });
+    onResult?.({ sql, ...r, export: exportResult });
     const shown = r.rows.slice(0, MODEL_ROWS);
     const note = shown.length < r.rowCount ? ` (showing first ${shown.length} of ${r.rowCount})` : "";
     const attached =
-      onResult && r.rows.length > 0
+      onResult && exportResult && r.rows.length > 0
         ? `The full result${r.truncated ? ` (first ${r.rows.length} of ${r.rowCount} rows)` : ""} will be attached to the thread as an Excel file.\n`
         : "";
     return {
@@ -60,11 +61,15 @@ export function createReportsMcpServer(
     tools: [
       tool(
         "query_reports_db",
-        `Run a READ-ONLY SQL query against the configured reporting database (a read replica). Only a single SELECT / WITH / EXEC (stored procedure) statement is allowed — no writes. Use this to answer questions with real report data. You see at most the first ${MODEL_ROWS} rows; the full result is attached to the Slack thread as an Excel file.`,
+        `Run a READ-ONLY SQL query against the configured reporting database (a read replica). Only a single SELECT / WITH / EXEC (stored procedure) statement is allowed — no writes. Use this to answer questions with real report data. You see at most the first ${MODEL_ROWS} rows. Set export=true on the query (or queries) whose result answers the user; those full results are attached to the Slack thread as an Excel file. Leave it false for schema lookups and other exploratory queries.`,
         {
           sql: z.string().describe("A single read-only SELECT/WITH/EXEC statement"),
+          export: z
+            .boolean()
+            .optional()
+            .describe("true when this query's result is the answer the user should get in the Excel file"),
         },
-        async (args) => runReportsQuery(args.sql, cfg, onResult)
+        async (args) => runReportsQuery(args.sql, cfg, onResult, queryReportsDb, args.export ?? false)
       ),
     ],
   });
